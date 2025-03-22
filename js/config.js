@@ -1,4 +1,4 @@
-import { lib, game, ui, get, ai, _status } from './utils.js';
+import { lib, game, ui, get, ai, _status, security } from './utils.js';
 
 export const config = {
 	apart: {
@@ -24,33 +24,21 @@ export const config = {
 			sl: '显示胜率',
 			off: '不显示',
 		},
-		onclick(item) {
-			game.saveExtensionConfig('胜负统计', 'display', item);
-		},
 	},
 	record: {
 		name: '<span style="font-family: xingkai">武将胜负记录</span>',
 		intro: '开启后，游戏结束将根据玩家胜负记录玩家所使用的武将胜负',
 		init: true,
-		onclick(item) {
-			game.saveExtensionConfig('胜负统计', 'record', item);
-		},
 	},
 	tryAll: {
 		name: '<span style="font-family: xingkai">尝试记录全场武将</span>',
 		intro: '开启后，游戏结束将记录根据玩家胜负可以推测出来胜负的角色所使用的武将胜负',
 		init: false,
-		onclick(item) {
-			game.saveExtensionConfig('胜负统计', 'tryAll', item);
-		},
 	},
 	sw: {
 		name: '<span style="font-family: xingkai">其他阵营视为同一阵营</span>',
 		intro: '开启后，游戏结束进行记录时其他阵营将视为同一阵营，即玩家方赢、其余方均输，玩家方没赢，其余方均赢',
 		init: false,
-		onclick(item) {
-			game.saveExtensionConfig('胜负统计', 'sw', item);
-		},
 	},
 	change: {
 		name: '<span style="font-family: xingkai">更换武将角色</font>',
@@ -61,17 +49,6 @@ export const config = {
 			pre: '记录最初的',
 			nxt: '记录最后的',
 		},
-		onclick(item) {
-			game.saveExtensionConfig('胜负统计', 'change', item);
-		},
-	},
-	operateJl: {
-		name: '<span style="font-family: xingkai">出牌阶段可修改胜负记录</font>',
-		intro: '开启后，出牌阶段可以对场上武将或所有武将当前游戏模式的胜负记录进行批量删除或修改操作',
-		init: false,
-		onclick(item) {
-			game.saveExtensionConfig('胜负统计', 'operateJl', item);
-		},
 	},
 	slRank: {
 		name: '当前模式胜率排行榜',
@@ -81,7 +58,6 @@ export const config = {
 				cgn = get.sfConfigName(),
 				num = 0;
 			for (let i of cgn) {
-				game.sfRefresh(i, false);
 				let rankNum = parseInt(lib.config.extension_胜负统计_rankNum),
 					sortedKeys = Object.entries(get.purifySFConfig(lib.config[i], parseInt(lib.config.extension_胜负统计_min)))
 						.sort((a, b) => {
@@ -132,9 +108,6 @@ export const config = {
 			'-20': '最后二十名',
 			'-50': '最后五十名',
 		},
-		onclick(item) {
-			game.saveExtensionConfig('胜负统计', 'rankNum', item);
-		},
 	},
 	min: {
 		name: '<span style="font-family: xingkai">只筛选总场数：</font>',
@@ -150,22 +123,12 @@ export const config = {
 			50: '不少于50局的',
 			0: '不少于0局的',
 		},
-		onclick(item) {
-			game.saveExtensionConfig('胜负统计', 'min', item);
-		},
 	},
 	loadJl: {
 		name: '载入当前模式武将胜负记录',
 		clear: true,
 		onclick() {
 			let container = ui.create.div('.popup-container.editor');
-			let editorpage = ui.create.div(container);
-			let discardConfig = ui.create.div('.editbutton', '取消', editorpage, function () {
-				ui.window.classList.remove('shortcutpaused');
-				ui.window.classList.remove('systempaused');
-				container.delete(null);
-				delete window.saveNonameInput;
-			});
 			let node = container;
 			let map = get.sfConfigName();
 			let str = '';
@@ -173,11 +136,11 @@ export const config = {
 				str +=
 					'_status.' +
 					i +
-					' = {\r	//请在此大括号内填写' +
+					' = { //请在此大括号内填写' +
 					get.currentModeInfo(true) +
 					'你想载入的武将' +
 					get.identityInfo(i) +
-					'胜负记录\r};\r';
+					'胜负记录\n};\n';
 			}
 			str += '//请在{}内进行编辑，务必使用英文标点符号！';
 			node.code = str;
@@ -193,12 +156,12 @@ export const config = {
 						if (_status[i] && Object.prototype.toString.call(_status[i]) !== '[object Object]') throw 'typeError';
 					}
 				} catch (e) {
-					if (e === 'typeError') alert('类型错误');
+					if (e === 'typeError') alert('每个武将对应的记录应为{ win: number, lose: number }格式');
 					else alert('代码语法有错误，请仔细检查（' + e + '）');
 					return;
 				}
 				for (let i of map) {
-					if (_status[i])
+					if (_status[i]) {
 						for (let name in _status[i]) {
 							lib.config[i][name] = _status[i][name];
 							if (!lib.config[i][name].win) lib.config[i][name].win = 0;
@@ -207,7 +170,8 @@ export const config = {
 							if (all) lib.config[i][name].sl = lib.config[i][name].win / all;
 							else delete lib.config[i][name];
 						}
-					game.saveConfig(i, lib.config[i]);
+						game.saveConfig(i, lib.config[i]);
+					}
 				}
 				ui.window.classList.remove('shortcutpaused');
 				ui.window.classList.remove('systempaused');
@@ -216,8 +180,7 @@ export const config = {
 				delete window.saveNonameInput;
 			};
 			window.saveNonameInput = saveInput;
-			let saveConfig = ui.create.div('.editbutton', '保存', editorpage, saveInput);
-			let editor = ui.create.div(editorpage);
+			let editor = ui.create.div(container, saveInput);
 			if (node.aced) {
 				ui.window.appendChild(node);
 				node.editor.setValue(node.code, 1);
@@ -231,25 +194,12 @@ export const config = {
 				}
 				node.textarea.value = node.code;
 			} else {
-				let aceReady = function () {
-					ui.window.appendChild(node);
-					let mirror = window.CodeMirror(editor, {
-						value: node.code,
-						mode: 'javascript',
-						lineWrapping: !lib.config.touchscreen && lib.config.mousewheel,
-						lineNumbers: true,
-						indentUnit: 4,
-						autoCloseBrackets: true,
-						theme: 'mdn-like',
+				if (!window.CodeMirror) {
+					import('../../game/codemirror.js').then(() => {
+						lib.codeMirrorReady(node, editor);
 					});
-					lib.setScroll(editor.querySelector('.CodeMirror-scroll'));
-					node.aced = true;
-					node.editor = mirror;
-				};
-				if (!window.ace) {
-					lib.init.js(lib.assetURL + 'game', 'codemirror', aceReady);
 					lib.init.css(lib.assetURL + 'layout/default', 'codemirror');
-				} else aceReady();
+				} else lib.codeMirrorReady(node, editor);
 			}
 		},
 	},
@@ -257,35 +207,20 @@ export const config = {
 		name: '复制当前模式武将胜负记录',
 		clear: true,
 		onclick() {
-			let cgn = get.sfConfigName();
-			let mode = get.currentModeInfo(true) + '所有武将';
-			let copy = '',
-				show = true;
-			for (let i of cgn) {
-				show = true;
-				if (!confirm(copy + '是否复制' + mode + get.identityInfo(i) + '胜负记录？')) {
-					copy = '';
-					continue;
-				}
+			const cgns = get.sfConfigName();
+			const mode = get.currentModeInfo(true) + '所有武将的';
+			for (let i of cgns) {
+				if (!confirm('是否复制' + mode + get.identityInfo(i) + '胜负记录？')) continue;
 				let map = lib.config[i] || {},
-					txt = '{ // ' + mode + get.identityInfo(i) + '胜负记录\r';
-				game.sfRefresh(i, false);
+					txt = '// ' + mode + get.identityInfo(i) + '胜负记录\r';
 				for (let name in map) {
 					txt += '\r\t"' + name + '":{\r\t\twin: ' + map[name].win + ',\r\t\tlose: ' + map[name].lose + ',\r\t},';
 				}
-				let textarea = document.createElement('textarea');
-				textarea.setAttribute('readonly', 'readonly');
-				textarea.value = txt;
-				document.body.appendChild(textarea);
-				textarea.select();
-				if (game.copy(txt, false, false)) {
-					copy = mode + get.identityInfo(i) + '胜负记录已成功复制到剪切板，建议您先粘贴到其他地方再进行后续操作。\n';
-				} else copy = mode + get.identityInfo(i) + '胜负记录复制失败。\n';
-				show = false;
-			}
-			if (!show) {
-				if (copy.includes('失败')) alert(copy.split('。')[0]);
-				else alert(copy.split('，')[0]);
+				game.copy(
+					txt,
+					mode + get.identityInfo(i) + '胜负记录已成功复制到剪切板，建议您先粘贴到其他地方再进行后续操作。',
+					mode + get.identityInfo(i) + '胜负记录复制失败。'
+				);
 			}
 		},
 	},
@@ -294,18 +229,18 @@ export const config = {
 		clear: true,
 		onclick() {
 			let mode = get.currentModeInfo(true),
-				cgn = get.sfConfigName();
-			if (cgn.length > 1) {
+				cgns = get.sfConfigName();
+			if (cgns.length > 1) {
 				let num = 0;
-				for (let i of cgn) {
-					if (confirm('您确定要清空' + mode + '所有武将' + get.identityInfo(i) + '胜负记录吗？')) {
+				for (let i of cgns) {
+					if (confirm('您确定要清空' + mode + '所有武将的' + get.identityInfo(i) + '胜负记录吗？')) {
 						num++;
 						game.saveConfig(i, {});
 					}
 				}
-				if (num) alert('成功清除' + num + '项');
+				if (num) alert('已成功清除' + num + '项');
 			} else if (confirm('您确定要清空' + lib.translate[get.mode()] + '模式' + mode + '所有武将的胜负记录吗？')) {
-				game.saveConfig(cgn[0], {});
+				game.saveConfig(cgns[0], {});
 				alert('清除成功');
 			}
 		},
@@ -316,11 +251,14 @@ export const config = {
 	},
 	qc: {
 		name: '武将登场去重',
-		intro: '开启后，游戏开始或隐匿武将展示武将牌时，若场上有拼音id重复的武将，则令其中随机一名角色再次进行选将并重复此流程。',
+		intro: '开启后，游戏开始或隐匿武将展示武将牌时，若场上有同名武将，则令其中随机一名角色再次进行选将并重复此流程。',
 		init: false,
 	},
 	tip1: {
-		name: '<font color=#FF3300>注意！</font>此功能进行的选将<font color=#FFFF00>不再额外提供固定武将</font>，且<font color=#FFFF00>暂不支持为特殊模式提供专属将池</font>',
+		name: ui.joint`
+			<font color=#FF3300>注意！</font>
+			此功能进行的选将<font color=#FFFF00>不再额外提供固定武将</font>，且<font color=#FFFF00>暂不支持为特殊模式提供专属将池</font>
+		`,
 		clear: true,
 	},
 	qcs: {
@@ -353,7 +291,11 @@ export const config = {
 	},
 	qcp: {
 		name: '玩家去重时',
-		intro: '玩家为重复武将其中一方被选中更换武将时，〔人机先执行〕优先令另一方更换武将，若另一方受情景约束不能更换武将，玩家不受此约束，则要求玩家更换武将；〔始终不执行〕优先令另一方更换武将，若另一方受情景约束不能更换武将，则不再对这组进行去重操作',
+		intro: ui.joint`
+			玩家为重复武将其中一方被选中更换武将时，
+			〔人机先执行〕优先令另一方更换武将，若另一方受情景约束不能更换武将，玩家不受此约束，则要求玩家更换武将；
+			〔始终不执行〕优先令另一方更换武将，若另一方受情景约束不能更换武将，则不再对这组进行去重操作
+		`,
 		init: 'ai',
 		item: {
 			zc: '直接执行',
@@ -367,7 +309,11 @@ export const config = {
 	},
 	Wj: {
 		name: '<font color=#00FFFF>伪</font>玩家可选ai禁选',
-		intro: '开启后，游戏开始或隐匿武将展示武将牌时，若场上有ai选择了伪禁列表里包含的ID对应武将，则<font color=#FFFF00>勒令其</font>从未加入游戏且不包含伪禁列表武将的将池里<font color=#FFFF00>再次</font>进行<font color=#FFFF00>选将</font>',
+		intro: ui.joint`
+			开启后，游戏开始或隐匿武将展示武将牌时，
+			若场上有ai选择了伪禁列表里包含的ID对应武将，
+			则<font color=#FFFF00>勒令其</font>从未加入游戏且伪禁列表不包含的将池里<font color=#FFFF00>再次进行选将</font>
+		`,
 		init: false,
 	},
 	wjs: {
@@ -407,18 +353,10 @@ export const config = {
 		name: '编辑伪禁列表',
 		clear: true,
 		onclick() {
-			//代码取自［编辑统率将池］
 			let container = ui.create.div('.popup-container.editor');
-			let editorpage = ui.create.div(container);
-			let discardConfig = ui.create.div('.editbutton', '取消', editorpage, function () {
-				ui.window.classList.remove('shortcutpaused');
-				ui.window.classList.remove('systempaused');
-				container.delete(null);
-				delete window.saveNonameInput;
-			});
 			let node = container;
 			let map = lib.config.extension_胜负统计_wj || [];
-			let str = 'disabled=[';
+			let str = 'wj = [';
 			for (let i = 0; i < map.length; i++) {
 				str += '\n	"' + map[i] + '",';
 			}
@@ -431,17 +369,14 @@ export const config = {
 				if (container.editor) code = container.editor.getValue();
 				else if (container.textarea) code = container.textarea.value;
 				try {
-					var disabled = null;
-					eval(code);
-					if (!Array.isArray(disabled)) {
-						throw '类型不符';
-					}
+					var { wj } = security.exec2(code);
+					if (!Array.isArray(wj)) throw '类型不符';
 				} catch (e) {
 					if (e === '类型不符') alert(e);
 					else alert('代码语法有错误，请仔细检查（' + e + '）');
 					return;
 				}
-				game.saveExtensionConfig('胜负统计', 'wj', disabled);
+				game.saveExtensionConfig('胜负统计', 'wj', wj);
 				ui.window.classList.remove('shortcutpaused');
 				ui.window.classList.remove('systempaused');
 				container.delete();
@@ -449,8 +384,7 @@ export const config = {
 				delete window.saveNonameInput;
 			};
 			window.saveNonameInput = saveInput;
-			let saveConfig = ui.create.div('.editbutton', '保存', editorpage, saveInput);
-			let editor = ui.create.div(editorpage);
+			let editor = ui.create.div(container, saveInput);
 			if (node.aced) {
 				ui.window.appendChild(node);
 				node.editor.setValue(node.code, 1);
@@ -464,25 +398,12 @@ export const config = {
 				}
 				node.textarea.value = node.code;
 			} else {
-				let aceReady = function () {
-					ui.window.appendChild(node);
-					let mirror = window.CodeMirror(editor, {
-						value: node.code,
-						mode: 'javascript',
-						lineWrapping: !lib.config.touchscreen && lib.config.mousewheel,
-						lineNumbers: true,
-						indentUnit: 4,
-						autoCloseBrackets: true,
-						theme: 'mdn-like',
+				if (!window.CodeMirror) {
+					import('../../game/codemirror.js').then(() => {
+						lib.codeMirrorReady(node, editor);
 					});
-					lib.setScroll(editor.querySelector('.CodeMirror-scroll'));
-					node.aced = true;
-					node.editor = mirror;
-				};
-				if (!window.ace) {
-					lib.init.js(lib.assetURL + 'game', 'codemirror', aceReady);
 					lib.init.css(lib.assetURL + 'layout/default', 'codemirror');
-				} else aceReady();
+				} else lib.codeMirrorReady(node, editor);
 			}
 		},
 	},
@@ -495,23 +416,14 @@ export const config = {
 			for (let i = 0; i < map.length; i++) {
 				txt += '\r	"' + map[i] + '",';
 			}
-			const textarea = document.createElement('textarea');
-			textarea.setAttribute('readonly', 'readonly');
-			textarea.value = txt;
-			document.body.appendChild(textarea);
-			textarea.select();
-			if (document.execCommand('copy')) {
-				document.execCommand('copy');
-				alert('伪禁列表已成功复制到剪切板');
-			} else alert('复制失败');
-			document.body.removeChild(textarea);
+			game.copy(txt, '伪禁列表已成功复制到剪切板');
 		},
 	},
 	clearWj: {
 		name: '清空伪禁列表',
 		clear: true,
 		onclick() {
-			if (confirm('您确定要清空伪玩家可选ai禁选列表（共' + lib.config.extension_胜负统计_wj.length + '个伪禁武将）？')) {
+			if (confirm('您确定要清空伪禁列表（共' + lib.config.extension_胜负统计_wj.length + '个武将）吗？')) {
 				game.saveExtensionConfig('胜负统计', 'wj', []);
 				alert('清除成功');
 			}

@@ -1,4 +1,5 @@
 import { lib, game, ui, get, ai, _status } from '../../../noname.js';
+import security from '../../../noname/util/security.js';
 
 /**
  * 复制文本内容到剪贴板
@@ -51,9 +52,9 @@ game.copy = (text, success = '已成功复制到剪贴板', fail = '复制失败
 /**
  * 胜负统计刷新记录函数
  * @param { string } [sf] 要刷新的配置
- * @param { true } [redraw] 是否刷新显示，默认刷新
+ * @param { boolean } [redraw] 是否刷新显示，默认不刷新
  */
-game.sfRefresh = (sf, redraw = true) => {
+game.sfRefresh = (sf, redraw = false) => {
 	let cgn;
 	if (typeof sf !== 'string') cgn = get.sfConfigName();
 	else cgn = [sf];
@@ -71,7 +72,7 @@ game.sfRefresh = (sf, redraw = true) => {
 				else lib.characterTitle[i] += '<br>';
 				lib.characterTitle[i] += get.identityInfo(sf) + '<br>';
 				if (lib.config.extension_胜负统计_display !== 'sf')
-					lib.characterTitle[i] += '总场数：' + all + ' 胜率：' + Math.round(10000 * lib.config[sf][i].sl) / 100 + '%<br>';
+					lib.characterTitle[i] += '总场数：' + all + '<br>胜率：' + Math.round(100000 * lib.config[sf][i].sl) / 100 + '%<br>';
 				if (lib.config.extension_胜负统计_display !== 'sl')
 					lib.characterTitle[i] += lib.config[sf][i].win + '胜 ' + lib.config[sf][i].lose + '负<br>';
 			}
@@ -153,9 +154,9 @@ get.identityInfo = (str, none) => {
 
 /**
  * 筛选至少min场的胜负记录
- * @param { Record<string, { win: number; lose: number; sf?: number }> } config - 胜负记录字典
+ * @param { Record<string, { win: number; lose: number; sl?: number }> } config - 胜负记录字典
  * @param { number } min - 最小场次要求
- * @returns { Record<string, { win: number; lose: number; sf?: number }> } 过滤后的胜负记录字典
+ * @returns { Record<string, { win: number; lose: number; sl?: number }> } 过滤后的胜负记录字典
  */
 get.purifySFConfig = (config, min) => {
 	if (Object.prototype.toString.call(config) !== '[object Object]') return config;
@@ -296,4 +297,4 @@ ui.joint = function (strings, ...values) {
 	return lines.join('').trim();
 };
 
-export { lib, game, ui, get, ai, _status };
+export { lib, game, ui, get, ai, _status, security };

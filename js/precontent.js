@@ -2,6 +2,7 @@ import { lib, game, ui, get, ai, _status } from './utils.js';
 
 export function precontent(config, pack) {
 	lib.arenaReady.push(() => {
+		game.saveExtensionConfig('胜负记录', 'operateJl', false);
 		if (!Array.isArray(lib.config.extension_胜负统计_wj)) {
 			if (Array.isArray(lib.config.extension_AI优化_wj) && lib.config.extension_AI优化_wj.length) {
 				game.saveExtensionConfig('胜负统计', 'wj', lib.config.extension_AI优化_wj);
@@ -11,7 +12,7 @@ export function precontent(config, pack) {
 				alert('已成功载入『官将重修』中对应伪禁列表配置');
 			} else game.saveExtensionConfig('胜负统计', 'wj', []);
 		}
-		if (!lib.config.extension_胜负统计_apart) game.sfRefresh();
+		if (!lib.config.extension_胜负统计_apart) game.sfRefresh(true, true);
 		lib.onover.push((result) => {
 			if (!lib.config.extension_胜负统计_record) return;
 			let curs = game.filterPlayer2(true, null, true),
