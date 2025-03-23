@@ -11,41 +11,26 @@ import security from '../../../noname/util/security.js';
 game.copy = (text, success = '已成功复制到剪贴板', fail = '复制失败') => {
 	if (typeof text !== 'string') return;
 	let copied = false;
-	const tryExecCommand = () => {
-		const textarea = document.createElement('textarea');
-		textarea.value = text;
-		textarea.style.position = 'fixed';
-		textarea.style.opacity = 0;
-		document.body.appendChild(textarea);
-		try {
-			textarea.select();
-			copied = document.execCommand('copy');
-			if (copied) {
-				if (success) alert(success);
-			} else {
-				if (fail) alert(fail);
-			}
-		} catch (e) {
-			console.error('execCommand失败:', e);
-			if (fail) alert(fail);
-		} finally {
-			document.body.removeChild(textarea);
-		}
-	};
+	const textarea = document.createElement('textarea');
+	textarea.value = text;
+	textarea.style.position = 'fixed';
+	textarea.style.left = '-9999px';
+	textarea.style.width = '1px';
+	document.body.appendChild(textarea);
+	textarea.focus();
+	textarea.select();
 	try {
-		navigator.clipboard
-			.writeText(text)
-			.then(() => {
-				copied = true;
-				if (success) alert(success);
-			})
-			.catch(() => {
-				tryExecCommand();
-			});
-	} catch (error) {
-		console.warn('Clipboard API失败:', error);
-		tryExecCommand();
+		copied = document.execCommand('copy');
+		if (copied) {
+			success && alert(success);
+		} else {
+			fail && alert(fail);
+		}
+	} catch (e) {
+		console.error('execCommand失败:', e);
+		fail && alert(fail);
 	}
+	document.body.removeChild(textarea);
 	return copied;
 };
 
@@ -55,10 +40,10 @@ game.copy = (text, success = '已成功复制到剪贴板', fail = '复制失败
  * @param { boolean } [redraw] 是否刷新显示，默认不刷新
  */
 game.sfRefresh = (sf, redraw = false) => {
-	let cgn;
-	if (typeof sf !== 'string') cgn = get.sfConfigName();
-	else cgn = [sf];
-	for (let sf of cgn) {
+	let cgns;
+	if (typeof sf !== 'string') cgns = get.sfConfigName();
+	else cgns = [sf];
+	for (let sf of cgns) {
 		if (Object.prototype.toString.call(lib.config[sf]) !== '[object Object]') lib.config[sf] = {};
 		for (let i in lib.config[sf]) {
 			let all = lib.config[sf][i].win + lib.config[sf][i].lose;
@@ -72,7 +57,7 @@ game.sfRefresh = (sf, redraw = false) => {
 				else lib.characterTitle[i] += '<br>';
 				lib.characterTitle[i] += get.identityInfo(sf) + '<br>';
 				if (lib.config.extension_胜负统计_display !== 'sf')
-					lib.characterTitle[i] += '总场数：' + all + '<br>胜率：' + Math.round(100000 * lib.config[sf][i].sl) / 100 + '%<br>';
+					lib.characterTitle[i] += '总场数：' + all + '<br>胜率：' + Math.round(100000 * lib.config[sf][i].sl) / 1000 + '%<br>';
 				if (lib.config.extension_胜负统计_display !== 'sl')
 					lib.characterTitle[i] += lib.config[sf][i].win + '胜 ' + lib.config[sf][i].lose + '负<br>';
 			}
@@ -159,7 +144,10 @@ get.identityInfo = (str, none) => {
  * @returns { Record<string, { win: number; lose: number; sl?: number }> } 过滤后的胜负记录字典
  */
 get.purifySFConfig = (config, min) => {
-	if (Object.prototype.toString.call(config) !== '[object Object]') return config;
+	if (Object.prototype.toString.call(config) !== '[object Object]') {
+		alert('config ' + config + '不为[object Object]类型');
+		return config;
+	}
 	if (typeof min !== 'number' || isNaN(min)) min = 0;
 	let result = {},
 		judge = false;
@@ -264,13 +252,13 @@ get.SL = (name, identity, strategy) => {
 	else if (strategy === 'max') num2 = 1;
 	else if (strategy === 'min') num2 = 0;
 	for (let cgn of configNames) {
-		let zhu = lib.config[cgn]?.[name1]?.sl;
+		let zhu = lib.config[cgn][name1]?.sl;
 		if (typeof zhu !== 'number') {
 			if (num2 >= 0) zhu = num2;
 			else zhu = num1;
 		}
 		if (name2) {
-			let fu = lib.config[cgn]?.[name2]?.sl;
+			let fu = lib.config[cgn][name2]?.sl;
 			if (typeof fu !== 'number') {
 				if (num2 >= 0) fu = num2;
 				else console.error('get.SL: 没有为双将胜率指定计算方案或参考值', strategy);

@@ -1,29 +1,65 @@
 import { lib, game, ui, get, ai, _status } from './utils.js';
 
 export function content(config, pack) {
+	/**
+	 * 获取num个符合筛选条件的候选武将列表
+	 * @param { number } num - 需要获取的候选武将数量
+	 * @param { (character: string, selectedList: string[]) => boolean } filter - 筛选函数
+	 *
+	 * character: 当前检查的武将名称
+	 *
+	 * selectedList: 已选中的武将列表，返回是否保留该武将
+	 * @returns { string[] } 符合条件的武将名称数组（实际数量可能小于num）
+	 */
+	lib.element.player.fetchCandidates = (num, filter) => {
+		let list = [];
+		if (!_status.sftjlist) {
+			//未上场角色池
+			_status.sftjlist = [];
+			if (_status.connectMode) _status.sftjlist = get.charactersOL();
+			else
+				for (let i in lib.character) {
+					if (lib.filter.characterDisabled2(i) || lib.filter.characterDisabled(i)) continue;
+					_status.sftjlist.push(i);
+				}
+			game.countPlayer2((current) => {
+				_status.sftjlist.remove(current.name);
+				_status.sftjlist.remove(current.name1);
+				_status.sftjlist.remove(current.name2);
+			});
+		}
+		if (typeof num !== 'number' || isNaN(num)) num = 1;
+		if (typeof filter !== 'function') filter = () => true;
+		_status.sftjlist.randomSort();
+		for (let i = 0; i < _status.sftjlist.length; i++) {
+			if (this !== game.me && lib.config.extension_胜负统计_wj.includes(_status.sftjlist[i])) continue;
+			if (filter(_status.sftjlist[i], list)) list.push(_status.sftjlist[i]);
+			if (list.length >= num) break;
+		}
+		return list;
+	};
 	lib.skill._sftj_start = {
 		trigger: { global: 'gameStart' },
 		filter(event, player) {
-			if (player === game.me) {
-				game.countPlayer2((current) => {
-					current.storage.sftj = {
-						cg1: current.name1,
-						cg2: current.name2,
-					};
-				});
-				if (lib.config.extension_胜负统计_apart) return true;
-			}
+			return player === game.me;
 		},
 		silent: true,
 		priority: 157,
 		charlotte: true,
 		superCharlotte: true,
-		content() {
-			game.sfRefresh(true, true);
+		async content(event, trigger, player) {
+			game.countPlayer2((current) => {
+				current.storage.sftj = {
+					cg1: current.name1,
+					cg2: current.name2,
+				};
+			});
 		},
 	};
-	lib.skill._sftj_remove_duplicate = { //同名去重
-		trigger: { global: ['gameStart', 'showCharacterEnd'] },
+	lib.skill._sftj_remove_duplicate = { //同名武将去重
+		trigger: {
+			global: ['gameStart', 'showCharacterEnd', 'changeCharacterEnd'],
+		},
 		filter(event, player) {
 			return lib.config.extension_胜负统计_qc && player === game.me;
 		},
@@ -32,281 +68,87 @@ export function content(config, pack) {
 		priority: 729,
 		charlotte: true,
 		superCharlotte: true,
-		content() {
-			'step 0'
-			if (!_status.sftjlist) {
-				//未上场角色池
-				let list = [];
-				if (_status.connectMode) list = get.charactersOL();
-				else
-					for (let i in lib.character) {
-						if (lib.filter.characterDisabled2(i) || lib.filter.characterDisabled(i)) continue;
-						list.push(i);
-					}
-				game.countPlayer2((current) => {
-					list.remove(current.name);
-					list.remove(current.name1);
-					list.remove(current.name2);
-				});
-				_status.sftjlist = list;
-			}
-			let names = [],
-				currents = game.filterPlayer().randomSort(),
-				info;
-			event.target = null;
-			event.add = false;
+		async content(event, trigger, player) {
+			const currents = game.filterPlayer().randomSort();
+			let rawNames = [],
+				target = null,
+				name,
+				index;
 			if (!_status.sftj_qc) _status.sftj_qc = [];
-			for (let i = 0; i < currents.length; i++) {
+			for (const current of currents) {
 				for (let j = 1; j < 3; j++) {
-					info = currents[i]['name' + j];
-					if (typeof info !== 'string' || info.indexOf('unknown') === 0 || _status.sftj_qc.includes(info)) continue;
-					let find = false;
-					if (names.includes(info)) find = true;
-					else
-						for (let key of names) {
-							let index = key.split('_');
-							index = index[index.length - 1].split('');
-							find = true;
-							for (let check = info.length - 1; check >= 0; check--) {
-								let com = index.pop();
-								if (com !== info[check]) {
-									find = false;
-									break;
-								}
-								if (index.length === 0) {
-									if (check > 0 && info[check - 1] !== '_') find = false;
-									break;
-								}
-							}
-							if (find) break;
-						}
-					if (find) {
-						event.target = currents[i];
-						event.num = j - 1;
+					let info = current['name' + j];
+					if (typeof info !== 'string' || info.startsWith('unknown') || _status.sftj_qc.includes(info)) continue;
+					const rawName = get.rawName(current['name' + j]);
+					if (rawNames.includes(rawName)) {
+						target = current;
+						name = info;
+						index = j - 1;
+						rawNames = rawName;
 						break;
-					} else names.push(info);
+					} else rawNames.push(rawName);
 				}
+				if (target) break;
 			}
-			if (event.target) {
-				let sd = _status.mode,
-					name,
-					qcp = lib.config.extension_胜负统计_qcp,
-					curs;
-				if (get.mode() === 'single' && sd === 'dianjiang') {
-					if (!localStorage.getItem('gjcx_single_alerted')) {
-						localStorage.setItem('gjcx_single_alerted', true);
-						alert('当前模式为点将模式，不在［武将登场去重］功能管辖范围内');
-					}
-					event.finish();
-					return;
+			if (!target) return;
+			let sd = _status.mode,
+				qcp = lib.config.extension_胜负统计_qcp;
+			if (get.mode() === 'single' && sd === 'dianjiang') {
+				if (!lib.config.extension_胜负统计_single_alerted) {
+					alert('当前模式为点将模式，不在［武将登场去重］功能管辖范围内');
+					game.saveExtensionConfig('胜负统计', 'single_alerted', true);
 				}
-				if (event.num) name = event.target.name2;
-				else name = event.target.name1;
-				if (
-					(game.me === event.target && qcp !== 'zc') ||
-					event.target === game.boss ||
-					(get.mode() === 'boss' && event.target.identity === 'zhong') ||
-					event.target === game.trueZhu ||
-					event.target === game.falseZhu
-				) {
-					curs = game.filterPlayer((current) => {
-						if (
-							current === game.boss ||
-							(get.mode() === 'boss' && current.identity === 'zhong') ||
-							current === game.trueZhu ||
-							current === game.falseZhu
-						)
-							return false;
-						for (let j = 1; j < 3; j++) {
-							info = current['name' + j];
-							if (typeof info !== 'string' || info.indexOf('unknown') === 0) continue;
-							let find = false;
-							if (name === info) find = true;
-							else {
-								let index = name.split('_');
-								index = index[index.length - 1].split('');
-								find = true;
-								for (let check = info.length - 1; check >= 0; check--) {
-									let com = index.pop();
-									if (com !== info[check]) {
-										find = false;
-										break;
-									}
-									if (index.length === 0) {
-										if (check > 0 && info[check - 1] !== '_') find = false;
-										break;
-									}
-								}
-								if (find) break;
-							}
-							if (find) {
-								event.num = j - 1;
-								return true;
-							}
-						}
+				return;
+			}
+			if (
+				(target === game.me && qcp !== 'zc') ||
+				target === game.boss ||
+				(target.identity === 'zhong' && get.mode() === 'boss') ||
+				target === game.trueZhu ||
+				target === game.falseZhu
+			) {
+				let names = [];
+				game.filterPlayer((cur) => {
+					if (
+						cur === game.boss ||
+						(cur.identity === 'zhong' && get.mode() === 'boss') ||
+						cur === game.trueZhu ||
+						cur === game.falseZhu
+					)
 						return false;
-					});
-					if (!curs.length) event.target = null;
-					else if (qcp === 'zc') event.target = curs.randomGet();
-					else {
-						let me = false;
-						if (curs.includes(game.me)) {
-							me = true;
-							curs.remove(game.me);
-						}
-						if (curs.length) event.target = curs.randomGet();
-						else if (me && qcp !== 'no') event.target = game.me;
-						else event.target = null;
+					for (let j = 1; j < 3; j++) {
+						let info = cur['name' + j];
+						if (typeof info !== 'string' || info.startsWith('unknown')) continue;
+						const rawName = get.rawName(cur['name' + j]);
+						if (rawNames === rawName && (target !== cur || index !== j - 1))
+							names.push({
+								target: cur,
+								name: info,
+								index: j - 1,
+							});
 					}
-				}
-				if (!event.target) {
-					alert(get.translation(name) + '受情景约束，不能替换');
-					_status.sftj_qc.push(name);
-					event.finish();
-					return;
-				}
-				let ts = _status.sftjlist.randomSort(),
-					list = [],
-					str,
-					hx = 6,
-					id = event.target.identity;
-				if (lib.config.extension_胜负统计_qcs === 'same')
-					switch (get.mode()) {
-						case 'identity':
-							if (sd === 'zhong') {
-								if (id === 'fan' || id === 'zhong') hx = 6;
-								else hx = 8;
-							} else if (sd === 'purple') {
-								if (id.indexOf('Zhu') === 1) hx = 4;
-								else hx = 5;
-							} else hx = get.config('choice_' + id);
-							break;
-						case 'versus':
-							if (sd === 'two') hx = 7;
-							else if (sd === 'guandu') hx = 4;
-							else hx = 8;
-							break;
-						case 'doudizhu':
-							if (sd === 'normal') hx = get.config('choice_' + id);
-							else if (id === 'zhu') {
-								if (sd === 'kaihei') hx = 5;
-								else if (sd === 'huanle' || sd === 'binglin') hx = 7;
-								else hx = 4;
-							} else {
-								if (sd === 'kaihei') hx = 3;
-								else hx = 4;
-							}
-							break;
-						default:
-							if (typeof get.config('choice_' + id) === 'number') hx = get.config('choice_' + id);
-					}
-				else hx = parseInt(lib.config.extension_胜负统计_qcs);
-				for (let i = 0; i < ts.length; i++) {
-					if (player !== game.me && lib.config.extension_胜负统计_wj.includes(ts[i])) continue;
-					list.push(ts[i]);
-					if (list.length >= hx) break;
-				}
-				if (!list.length) {
-					alert('没有可供候选的武将！');
-					event.finish();
-					return;
-				}
-				if (
-					(event.target === game.zhu &&
-						(game.players.length > 4 ||
-							(game.players.length === 4 && sd === 'normal' && lib.config.extension_AI优化_fixFour))) ||
-					(id && (id === 'mingzhong' || id.indexOf('Zhu') > 0)) ||
-					event.target === game.friendZhu ||
-					event.target === game.enemyZhu
-				)
-					event.add = true;
-				if (event.target.name2 === undefined) str = '武将';
-				else if (event.num) str = '副将';
-				else str = '主将';
-				if (lib.config.extension_胜负统计_delayQc !== '0') game.delay(parseInt(lib.config.extension_胜负统计_delayQc));
-				if (list.length === 1) event._result = { links: list };
-				else
-					event.target.chooseButton(true, ['请选择一张武将牌替换你的' + str, [list, 'character']]).set('ai', (button) => {
-						return get.rank(button.link);
-					});
-			} else event.finish();
-			'step 1'
-			let name = result.links[0],
-				j = '将',
-				old = event.target.name1;
-			_status.sftjlist.remove(name);
-			if (event.num) {
-				j += '副将';
-				old = event.target.name2;
-				_status.sftjlist.push(event.target.name2);
-				event.target.init(event.target.name1, name);
-			} else {
-				_status.sftjlist.push(event.target.name1);
-				if (event.target.name2 !== undefined) {
-					j += '主将';
-					event.target.init(name, event.target.name2);
-				} else event.target.init(name);
-			}
-			if (event.add) {
-				event.target.maxHp++;
-				event.target.hp++;
-			}
-			if (!lib.character[name] || !lib.character[name][4] || !lib.character[name][4].includes('hiddenSkill'))
-				event.target.showCharacter(event.num, false);
-			game.log(
-				'#g' + get.cnNumber(player.getSeatNum() + 1) + '号位',
-				j,
-				'#y' + (lib.translate[old] || '未知'),
-				'更换为',
-				'#y' + (lib.translate[name] || '未知')
-			);
-			'step 2'
-			event.target.update();
-			event.trigger('showCharacterEnd');
-		},
-	};
-	lib.skill._sftj_fake_prohibited = {
-		//伪禁
-		trigger: {
-			global: 'gameStart',
-			player: 'showCharacterEnd',
-		},
-		filter(event, player) {
-			return lib.config.extension_胜负统计_Wj && player !== game.me && lib.config.extension_胜负统计_wj;
-		},
-		silent: true,
-		unique: true,
-		priority: 1024,
-		charlotte: true,
-		superCharlotte: true,
-		content() {
-			'step 0'
-			if (!_status.sftjlist) {
-				//未上场角色池
-				let list = [];
-				if (_status.connectMode) list = get.charactersOL();
-				else
-					for (let i in lib.character) {
-						if (lib.filter.characterDisabled2(i) || lib.filter.characterDisabled(i)) continue;
-						list.push(i);
-					}
-				game.countPlayer2((current) => {
-					list.remove(current.name);
-					list.remove(current.name1);
-					list.remove(current.name2);
 				});
-				_status.sftjlist = list;
+				if (!names.length) target = null;
+				else if (qcp === 'zc') {
+					({ target, name, index } = names.randomGet());
+				} else {
+					let me = [];
+					for (let i = 0; i < names.length; i++) {
+						if (names.target === game.me) me.push(names.splice(i--, 1)[0]);
+					}
+					if (names.length) ({ target, name, index } = names.randomGet());
+					else if (me.length && qcp === 'ai') ({ target, name, index } = me.randomGet());
+					else target = null;
+				}
 			}
-			if (player.name1 !== undefined && lib.config.extension_胜负统计_wj.includes(player.name1)) event.num = 0;
-			else if (player.name2 !== undefined && lib.config.extension_胜负统计_wj.includes(player.name2)) event.num = 1;
-			else event.finish();
-			'step 1'
-			let list = [],
-				hx = 6,
-				sd = _status.mode,
-				id = player.identity,
-				str;
-			if (lib.config.extension_胜负统计_wjs === 'same')
+			if (!target) {
+				alert(get.translation(name) + '受情景约束，不能替换' + get.translation(name));
+				_status.sftj_qc.push(name);
+				return;
+			}
+			let hx = 6,
+				id = target.identity;
+			if (lib.config.extension_胜负统计_qcs === 'same')
 				switch (get.mode()) {
 					case 'identity':
 						if (sd === 'zhong') {
@@ -336,78 +178,178 @@ export function content(config, pack) {
 					default:
 						if (typeof get.config('choice_' + id) === 'number') hx = get.config('choice_' + id);
 				}
-			else hx = parseInt(lib.config.extension_胜负统计_wjs);
-			_status.sftjlist.randomSort();
-			for (let i = 0; i < _status.sftjlist.length; i++) {
-				if (!lib.config.extension_胜负统计_wj.includes(_status.sftjlist[i])) list.push(_status.sftjlist[i]);
-				if (list.length >= hx) break;
-			}
+			else hx = parseInt(lib.config.extension_胜负统计_qcs);
+			const list = target.fetchCandidates(hx);
 			if (!list.length) {
 				alert('没有可供候选的武将！');
-				event.finish();
 				return;
 			}
-			if (
-				(player === game.zhu &&
-					(game.players.length > 4 || (game.players.length === 4 && sd === 'normal' && lib.config.extension_AI优化_fixFour))) ||
-				(id && (id === 'mingzhong' || id.indexOf('Zhu') > 0)) ||
-				player === game.friendZhu ||
-				player === game.enemyZhu
-			)
-				event.add = true;
-			else event.add = false;
-			if (player.name2 === undefined) str = '武将';
-			else if (event.num) str = '副将';
+			let str;
+			if (target.name2 === undefined) str = '武将牌';
+			else if (index) str = '副将';
 			else str = '主将';
-			if (lib.config.extension_胜负统计_delayWj !== '0') game.delay(parseInt(lib.config.extension_胜负统计_delayWj));
-			if (list.length === 1) event._result = { links: list };
+			if (lib.config.extension_胜负统计_delayQc !== '0') await game.delay(Number(lib.config.extension_胜负统计_delayQc));
+			let result;
+			if (list.length === 1) result = { links: list };
 			else
-				player.chooseButton(true, ['请选择一张武将牌替换你的' + str, [list, 'character']]).set('ai', (button) => {
-					return get.rank(button.link);
-				});
-			'step 2'
-			let name = result.links[0],
-				j = '将',
-				old = player.name1;
-			_status.sftjlist.remove(name);
-			if (event.num) {
-				j += '副将';
-				old = player.name2;
-				_status.sftjlist.push(player.name2);
-				player.init(player.name1, name);
-			} else {
-				_status.sftjlist.push(player.name1);
-				if (player.name2 !== undefined) {
-					j += '主将';
-					player.init(name, player.name2);
-				} else player.init(name);
-			}
-			if (event.add) {
-				player.maxHp++;
-				player.hp++;
-			}
-			if (!lib.character[name] || !lib.character[name][4] || !lib.character[name][4].includes('hiddenSkill'))
-				player.showCharacter(event.num, false);
-			game.log(
-				'#g' + get.cnNumber(player.getSeatNum() + 1) + '号位',
-				j,
-				'#y' + (lib.translate[old] || '未知'),
-				'更换为',
-				'#y' + (lib.translate[name] || '未知')
-			);
-			'step 3'
-			player.update();
-			event.trigger('showCharacterEnd');
+				result = await target
+					.chooseButton(true, ['请选择一张武将牌替换你的' + str, [list, 'character']])
+					.set('ai', (button) => {
+						return get.rank(button.link);
+					})
+					.forResult();
+			const newname = result.links[0];
+			_status.sftjlist.remove(newname);
+			_status.sftjlist.push(name);
+			await target.reinitCharacter(name, newname);
+			if (get.character(name).hasHiddenSkill) await target.showCharacter(index, false);
 		},
 	};
-	lib.skill._sftj_fixWj = {
-		//伪禁列表
+	lib.skill._sftj_fake_prohibited = { //伪禁
+		trigger: {
+			global: 'gameStart',
+			player: ['showCharacterEnd', 'changeCharacterEnd'],
+		},
+		filter(event, player) {
+			return lib.config.extension_胜负统计_Wj && player !== game.me && lib.config.extension_胜负统计_wj;
+		},
+		silent: true,
+		unique: true,
+		priority: 1024,
+		charlotte: true,
+		superCharlotte: true,
+		ruleSkill: true,
+		async content(event, trigger, player) {
+			for (const index of [0, 1]) {
+				const old = player['name' + (index + 1)];
+				if (old === undefined) continue;
+				if (!lib.config.extension_胜负统计_wj.includes(old)) continue;
+				let hx = 6,
+					sd = _status.mode,
+					id = player.identity;
+				if (lib.config.extension_胜负统计_wjs === 'same')
+					switch (get.mode()) {
+						case 'identity':
+							if (sd === 'zhong') {
+								if (id === 'fan' || id === 'zhong') hx = 6;
+								else hx = 8;
+							} else if (sd === 'purple') {
+								if (id.indexOf('Zhu') === 1) hx = 4;
+								else hx = 5;
+							} else hx = get.config('choice_' + id);
+							break;
+						case 'versus':
+							if (sd === 'two') hx = 7;
+							else if (sd === 'guandu') hx = 4;
+							else hx = 8;
+							break;
+						case 'doudizhu':
+							if (sd === 'normal') hx = get.config('choice_' + id);
+							else if (id === 'zhu') {
+								if (sd === 'kaihei') hx = 5;
+								else if (sd === 'huanle' || sd === 'binglin') hx = 7;
+								else hx = 4;
+							} else {
+								if (sd === 'kaihei') hx = 3;
+								else hx = 4;
+							}
+							break;
+						default:
+							if (typeof get.config('choice_' + id) === 'number') hx = get.config('choice_' + id);
+					}
+				else hx = parseInt(lib.config.extension_胜负统计_wjs);
+				const list = player.fetchCandidates(hx);
+				if (!list.length) {
+					alert('没有可供候选的武将！');
+					return;
+				}
+				let str;
+				if (player.name2 === undefined) str = '武将牌';
+				else if (index) str = '副将';
+				else str = '主将';
+				if (lib.config.extension_胜负统计_delayWj !== '0') await game.delay(Number(lib.config.extension_胜负统计_delayWj));
+				let result;
+				if (list.length === 1) result = { links: list };
+				else
+					result = await player
+						.chooseButton(true, ['请选择一张武将牌替换你的' + str, [list, 'character']])
+						.set('ai', (button) => {
+							return get.rank(button.link);
+						})
+						.forResult();
+				const name = result.links[0];
+				_status.sftjlist.remove(name);
+				_status.sftjlist.push(old);
+				await player.reinitCharacter(old, name);
+				if (get.character(name).hasHiddenSkill) await player.showCharacter(index, false);
+			}
+		},
+	};
+	lib.skill._sftj_filterSameName = { //同名武将筛选
 		enable: 'phaseUse',
 		filter(event, player) {
-			return player === game.me && lib.config.extension_胜负统计_fixWj;
+			if (player !== game.me || lib.config.extension_官将重修_filterSameName) return false;
+			return lib.config.extension_胜负统计_filterSameName;
+		},
+		filterTarget: true,
+		log: false,
+		charlotte: true,
+		superCharlotte: true,
+		ruleSkill: true,
+		prompt: '在当前模式快速启用或禁用与所选武将同名的武将',
+		async content(event, trigger, player) {
+			const banname = get.mode() + '_banned';
+			if (!lib.config[banname]) lib.config[banname] = [];
+			for (let idx = 1; idx < 2; idx++) {
+				if (typeof event.target['name' + idx] !== 'string') continue;
+				let name = get.rawName(event.target['name' + idx]),
+					enable = [],
+					disable = [];
+				for (let i in lib.character) {
+					let temp = get.rawName(i);
+					if (temp === name) {
+						if (lib.config[banname].includes(i)) disable.push(i);
+						else enable.push(i);
+					}
+				}
+				if (enable.length) {
+					const result = await player
+						.chooseButton(['选择要禁用的武将，直接点“确定”则全部禁用', [enable, 'character']], [0, Infinity])
+						.set('ai', (button) => 0)
+						.forResult();
+					if (result.bool) {
+						let arr;
+						if (result.links && result.links.length) arr = result.links;
+						else arr = enable;
+						lib.config[banname].addArray(arr);
+					}
+				}
+				if (disable.length) {
+					const result = await player
+						.chooseButton(['选择要启用的武将，直接点“确定”则全部启用', [disable, 'character']], [0, Infinity])
+						.set('ai', (button) => 0)
+						.forResult();
+					if (result.bool) {
+						let arr;
+						if (result.links && result.links.length) arr = result.links;
+						else arr = disable;
+						lib.config[banname].removeArray(arr);
+					}
+				}
+			}
+			game.saveConfig(banname, lib.config[banname]);
+		},
+	};
+	lib.translate._sftj_filterSameName = '<font color=#39FF14>同名武将筛选</font>';
+	lib.skill._sftj_fixWj = { //伪禁列表
+		enable: 'phaseUse',
+		filter(event, player) {
+			if (player !== game.me || lib.config.extension_AI优化_fixWj) return false;
+			return lib.config.extension_胜负统计_fixWj;
 		},
 		filterTarget(card, player, target) {
-			if (target.name.indexOf('unknown') === 0 && (target.name2 === undefined || target.name2.indexOf('unknown') === 0)) return false;
+			if (target.name.indexOf('unknown') === 0 && (target.name2 === undefined || target.name2.indexOf('unknown') === 0))
+				return false;
 			return true;
 		},
 		selectTarget: [0, Infinity],
@@ -417,106 +359,82 @@ export function content(config, pack) {
 		log: false,
 		charlotte: true,
 		superCharlotte: true,
-		content() {
-			'step 0'
-			targets.sortBySeat();
+		ruleSkill: true,
+		async content(event, trigger, player) {
+			const targets = event.targets;
+			let names = [];
 			if (targets.length) {
-				event.names = [];
-				for (let i of targets) {
-					if (i.name.indexOf('unknown')) event.names.push(i.name);
-					if (i.name2 !== undefined && i.name2.indexOf('unknown')) event.names.push(i.name2);
+				targets.sortBySeat();
+				for (const target of targets) {
+					if (!target.name1.startsWith('unknown')) names.add(target.name1);
+					if (target.name2 !== undefined && !target.name2.startsWith('unknown')) names.add(target.name2);
 				}
-				event.goto(2);
 			} else {
-				let ts = [];
-				event.sorts = [];
+				let packs = [];
 				for (let i in lib.characterPack) {
-					if (Object.prototype.toString.call(lib.characterPack[i]) === '[object Object]') {
-						event.sorts.push(lib.characterPack[i]);
-						ts.push(lib.translate[i + '_character_config']);
-					}
+					// if (Object.prototype.toString.call(lib.characterPack[i]) === '[object Object]')
+					packs.push(i);
 				}
-				if (!ts.length) event.finish();
-				else {
-					event.videoId = lib.status.videoId++;
-					let func = (player, list, id) => {
-						let choiceList = ui.create.dialog('请选择要移动的武将所在的武将包');
-						choiceList.videoId = id;
-						for (let i = 0; i < list.length; i++) {
-							let str =
-								'<div class="popup text" style="width:calc(100% - 10px);display:inline-block">' + list[i] + '</div>';
-							let next = choiceList.add(str);
-							next.firstChild.addEventListener(lib.config.touchscreen ? 'touchend' : 'click', ui.click.button);
-							next.firstChild.link = i;
-							for (let j in lib.element.button) {
-								next[j] = lib.element.button[j];
-							}
-							choiceList.buttons.add(next.firstChild);
+				if (!packs.length) return;
+				const result = game.me
+					.chooseButton([
+						'请选择要操作的武将所在的武将包',
+						[
+							packs.map((pack) => [
+								pack,
+								ui.joint`
+								<div class="popup text" style="width:calc(100% - 10px); display:inline-block">
+									${lib.translate[i + '_character_config']}
+								</div>
+							`,
+							]),
+							'textbutton',
+						],
+					])
+					.set('forced', true)
+					.set('ai', (button) => 0)
+					.set('selectButton', [0, packs.length])
+					.set('complexSelect', false)
+					.forResult();
+				if (result.links?.length) {
+					for (const pack of result.links) {
+						for (let i in lib.characterPack[pack]) {
+							names.push(i);
 						}
-						return choiceList;
-					};
-					if (game.me.isOnline2()) game.me.send(func, game.me, ts, event.videoId);
-					event.dialog = func(game.me, ts, event.videoId);
-					if (_status.auto) event.dialog.style.display = 'none';
-					let next = game.me.chooseButton();
-					next.set('dialog', event.videoId);
-					next.set('forced', true);
-					next.set('ai', (button) => {
-						return 1;
-					});
-					next.set('selectButton', [0, ts.length]);
-				}
-			}
-			'step 1'
-			if (game.me.isOnline2()) game.me.send('closeDialog', event.videoId);
-			event.dialog.close();
-			if (result.links && result.links.length) {
-				let nums = result.links.sort();
-				event.names = [];
-				for (let num of nums) {
-					for (let i in event.sorts[num]) {
-						event.names.push(i);
 					}
+					if (!names.length) {
+						alert('所选武将包不包含武将');
+						return;
+					}
+				} else return;
+			}
+			let jr = [],
+				yc = [];
+			for (let i of names) {
+				if (lib.config.extension_胜负统计_wj.includes(i)) yc.push(i);
+				else jr.push(i);
+			}
+			if (jr.length) {
+				const result = await player
+					.chooseButton(['请选择要加入伪禁列表的武将，直接点“确定”则全部加入', [jr, 'character']], [0, Infinity])
+					.set('ai', (button) => 0)
+					.forResult();
+				if (result.bool) {
+					if (result.links?.length) lib.config.extension_胜负统计_wj.addArray(result.links);
+					else lib.config.extension_胜负统计_wj.addArray(jr);
 				}
-				if (!event.names.length) {
-					alert('所选武将包不包含武将');
-					event.finish();
+			}
+			if (yc.length) {
+				const result = await player
+					.chooseButton(['请选择要移出伪禁列表的武将,直接点“确定”则全部移出', [yc, 'character']], [0, Infinity])
+					.set('ai', (button) => 0)
+					.forResult();
+				if (result.bool) {
+					if (result.links?.length) lib.config.extension_胜负统计_wj.removeArray(result.links);
+					else lib.config.extension_胜负统计_wj.removeArray(yc);
 				}
-			} else event.finish();
-			'step 2'
-			event.jr = [];
-			event.yc = [];
-			for (let i of event.names) {
-				if (lib.config.extension_胜负统计_wj.includes(i)) event.yc.push(i);
-				else event.jr.push(i);
 			}
-			if (event.jr.length)
-				player
-					.chooseButton(['请选择要加入伪禁列表的武将，直接点“确定”则全部加入', [event.jr, 'character']], [0, Infinity])
-					.set('ai', (button) => {
-						return 0;
-					});
-			else event.goto(4);
-			'step 3'
-			if (result.bool) {
-				if (result.links && result.links.length) lib.config.extension_胜负统计_wj.addArray(result.links);
-				else lib.config.extension_胜负统计_wj.addArray(event.jr);
-				game.saveExtensionConfig('胜负统计', 'wj', lib.config.extension_胜负统计_wj);
-			}
-			'step 4'
-			if (event.yc.length)
-				player
-					.chooseButton(['请选择要移出伪禁列表的武将,直接点“确定”则全部移出', [event.yc, 'character']], [0, Infinity])
-					.set('ai', (button) => {
-						return 0;
-					});
-			else event.finish();
-			'step 5'
-			if (result.bool) {
-				if (result.links && result.links.length) lib.config.extension_胜负统计_wj.removeArray(result.links);
-				else lib.config.extension_胜负统计_wj.removeArray(event.yc);
-				game.saveExtensionConfig('胜负统计', 'wj', lib.config.extension_胜负统计_wj);
-			}
+			game.saveExtensionConfig('胜负统计', 'wj', lib.config.extension_胜负统计_wj);
 		},
 		ai: {
 			result: {

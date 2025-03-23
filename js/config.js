@@ -2,7 +2,7 @@ import { lib, game, ui, get, ai, _status, security } from './utils.js';
 
 export const config = {
 	apart: {
-		name: '<span style="font-family: xingkai">区分当前游戏模式</font>',
+		name: '<span style="font-family: xinwei">区分当前游戏模式</font>',
 		intro: '开启后，武将胜负统计将<font color=#FF0000>区分开当前游戏模式</font>（即按照菜单->开始->模式->游戏模式分开统计）',
 		init: true,
 		onclick(item) {
@@ -55,15 +55,15 @@ export const config = {
 		clear: true,
 		onclick() {
 			let mode = get.currentModeInfo(true),
-				cgn = get.sfConfigName(),
+				cgns = get.sfConfigName(),
 				num = 0;
-			for (let i of cgn) {
+			for (let i of cgns) {
 				let rankNum = parseInt(lib.config.extension_胜负统计_rankNum),
 					sortedKeys = Object.entries(get.purifySFConfig(lib.config[i], parseInt(lib.config.extension_胜负统计_min)))
 						.sort((a, b) => {
 							let res = Math.round(100000 * a[1].sl) - Math.round(100000 * b[1].sl);
 							if (rankNum > 0) res = -res;
-							if (res == 0) return b[1].win + b[1].lose - a[1].win - a[1].lose;
+							if (res === 0) return b[1].win + b[1].lose - a[1].win - a[1].lose;
 							return res;
 						})
 						.slice(0, Math.abs(rankNum))
@@ -130,19 +130,11 @@ export const config = {
 		onclick() {
 			let container = ui.create.div('.popup-container.editor');
 			let node = container;
-			let map = get.sfConfigName();
-			let str = '';
+			let map = get.sfConfigName().map((i) => i.slice(15));
+			let str = '//请在{}内编辑，务必使用英文标点符号！';
 			for (let i of map) {
-				str +=
-					'_status.' +
-					i +
-					' = { //请在此大括号内填写' +
-					get.currentModeInfo(true) +
-					'你想载入的武将' +
-					get.identityInfo(i) +
-					'胜负记录\n};\n';
+				str += '\n_status.' + i + ' = { //在此填写你想载入的武将' + get.identityInfo(i) + '胜负记录\n\t\n};\n';
 			}
-			str += '//请在{}内进行编辑，务必使用英文标点符号！';
 			node.code = str;
 			ui.window.classList.add('shortcutpaused');
 			ui.window.classList.add('systempaused');
@@ -156,21 +148,22 @@ export const config = {
 						if (_status[i] && Object.prototype.toString.call(_status[i]) !== '[object Object]') throw 'typeError';
 					}
 				} catch (e) {
-					if (e === 'typeError') alert('每个武将对应的记录应为{ win: number, lose: number }格式');
+					if (e === 'typeError') alert('类型不为[object Object]');
 					else alert('代码语法有错误，请仔细检查（' + e + '）');
 					return;
 				}
 				for (let i of map) {
 					if (_status[i]) {
+						const cgn = 'extension_胜负统计_' + i;
 						for (let name in _status[i]) {
-							lib.config[i][name] = _status[i][name];
-							if (!lib.config[i][name].win) lib.config[i][name].win = 0;
-							if (!lib.config[i][name].lose) lib.config[i][name].lose = 0;
-							let all = lib.config[i][name].win + lib.config[i][name].lose;
-							if (all) lib.config[i][name].sl = lib.config[i][name].win / all;
-							else delete lib.config[i][name];
+							lib.config[cgn][name] = _status[i][name];
+							if (!lib.config[cgn][name].win) lib.config[cgn][name].win = 0;
+							if (!lib.config[cgn][name].lose) lib.config[cgn][name].lose = 0;
+							let all = lib.config[cgn][name].win + lib.config[cgn][name].lose;
+							if (all) lib.config[cgn][name].sl = lib.config[cgn][name].win / all;
+							else delete lib.config[cgn][name];
 						}
-						game.saveConfig(i, lib.config[i]);
+						game.saveConfig(i, lib.config[cgn]);
 					}
 				}
 				ui.window.classList.remove('shortcutpaused');
@@ -180,11 +173,11 @@ export const config = {
 				delete window.saveNonameInput;
 			};
 			window.saveNonameInput = saveInput;
-			let editor = ui.create.div(container, saveInput);
+			let editor = ui.create.editor(container, saveInput);
 			if (node.aced) {
 				ui.window.appendChild(node);
 				node.editor.setValue(node.code, 1);
-			} else if (lib.device == 'ios') {
+			} else if (lib.device === 'ios') {
 				ui.window.appendChild(node);
 				if (!node.textarea) {
 					let textarea = document.createElement('textarea');
@@ -195,7 +188,7 @@ export const config = {
 				node.textarea.value = node.code;
 			} else {
 				if (!window.CodeMirror) {
-					import('../../game/codemirror.js').then(() => {
+					import('../../../game/codemirror.js').then(() => {
 						lib.codeMirrorReady(node, editor);
 					});
 					lib.init.css(lib.assetURL + 'layout/default', 'codemirror');
@@ -209,19 +202,17 @@ export const config = {
 		onclick() {
 			const cgns = get.sfConfigName();
 			const mode = get.currentModeInfo(true) + '所有武将的';
+			let text = '';
 			for (let i of cgns) {
 				if (!confirm('是否复制' + mode + get.identityInfo(i) + '胜负记录？')) continue;
-				let map = lib.config[i] || {},
-					txt = '// ' + mode + get.identityInfo(i) + '胜负记录\r';
+				let map = lib.config[i] || {};
+				text += '_status.' + i.slice(15) + ' = { // ' + mode + get.identityInfo(i) + '胜负记录';
 				for (let name in map) {
-					txt += '\r\t"' + name + '":{\r\t\twin: ' + map[name].win + ',\r\t\tlose: ' + map[name].lose + ',\r\t},';
+					text += '\r\t"' + name + '":{\r\t\twin: ' + map[name].win + ',\r\t\tlose: ' + map[name].lose + ',\r\t},';
 				}
-				game.copy(
-					txt,
-					mode + get.identityInfo(i) + '胜负记录已成功复制到剪切板，建议您先粘贴到其他地方再进行后续操作。',
-					mode + get.identityInfo(i) + '胜负记录复制失败。'
-				);
 			}
+			text += '\r};\r';
+			game.copy(text, '对应胜负记录已成功复制到剪切板，请及时粘贴保存');
 		},
 	},
 	deleteJl: {
@@ -303,6 +294,11 @@ export const config = {
 			no: '始终不执行',
 		},
 	},
+	filterSameName: {
+		name: '同名武将筛选',
+		intro: '开启后，玩家可于出牌阶段选择场上的武将，系统会给出所有去前缀后与其同名的武将，玩家可在当前模式快速启用或禁用这些武将',
+		init: false,
+	},
 	bd2: {
 		clear: true,
 		name: '<center>伪禁相关</center>',
@@ -356,11 +352,11 @@ export const config = {
 			let container = ui.create.div('.popup-container.editor');
 			let node = container;
 			let map = lib.config.extension_胜负统计_wj || [];
-			let str = 'wj = [';
+			let str = 'wj = [ //请在[]内编辑，务必使用英文标点符号！';
 			for (let i = 0; i < map.length; i++) {
-				str += '\n	"' + map[i] + '",';
+				str += '\n\t"' + map[i] + '",';
 			}
-			str += '\n];\n//请在[]内进行编辑，或借此复制/粘贴内容以备份/还原配置\n//请务必使用英文标点符号！';
+			str += '\n];\n';
 			node.code = str;
 			ui.window.classList.add('shortcutpaused');
 			ui.window.classList.add('systempaused');
@@ -370,9 +366,9 @@ export const config = {
 				else if (container.textarea) code = container.textarea.value;
 				try {
 					var { wj } = security.exec2(code);
-					if (!Array.isArray(wj)) throw '类型不符';
+					if (!Array.isArray(wj)) throw 'typeError';
 				} catch (e) {
-					if (e === '类型不符') alert(e);
+					if (e === 'typeError') alert('类型不为[object Array]');
 					else alert('代码语法有错误，请仔细检查（' + e + '）');
 					return;
 				}
@@ -384,7 +380,7 @@ export const config = {
 				delete window.saveNonameInput;
 			};
 			window.saveNonameInput = saveInput;
-			let editor = ui.create.div(container, saveInput);
+			let editor = ui.create.editor(container, saveInput);
 			if (node.aced) {
 				ui.window.appendChild(node);
 				node.editor.setValue(node.code, 1);
@@ -399,7 +395,7 @@ export const config = {
 				node.textarea.value = node.code;
 			} else {
 				if (!window.CodeMirror) {
-					import('../../game/codemirror.js').then(() => {
+					import('../../../game/codemirror.js').then(() => {
 						lib.codeMirrorReady(node, editor);
 					});
 					lib.init.css(lib.assetURL + 'layout/default', 'codemirror');
@@ -414,7 +410,7 @@ export const config = {
 			let map = lib.config.extension_胜负统计_wj || [];
 			let txt = '';
 			for (let i = 0; i < map.length; i++) {
-				txt += '\r	"' + map[i] + '",';
+				txt += '\r\t"' + map[i] + '",';
 			}
 			game.copy(txt, '伪禁列表已成功复制到剪切板');
 		},
