@@ -11,7 +11,6 @@ let extensionPackage = {
 	config,
 	help: {},
 	package: {
-		author: '157',
 		intro: ui.joint`
 			<b>本扩展主要用于统计每个武将各模式各身份的胜负</b>
 			<br><br><font color=#FF3300>注意：本扩展</font>内，
@@ -19,12 +18,13 @@ let extensionPackage = {
 				其余选项<font color=#FF3300>即时生效</font>
 			<br>◆<font color=#70F3FF>长按选项</font>有提示
 		`,
-		diskURL: '',
-		forumURL: '',
-		version: '1.0',
 	},
 	files: { character: [], card: [], skill: [] },
 };
+const extensionInfo = await lib.init.promises.json(`${lib.assetURL}extension/胜负统计/info.json`);
+Object.keys(extensionInfo).forEach((key) => {
+	if (key !== 'intro') extensionPackage.package[key] = extensionInfo[key];
+});
 
 export let type = 'extension';
 export default extensionPackage;
