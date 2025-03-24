@@ -210,8 +210,8 @@ export const config = {
 				for (let name in map) {
 					text += '\r\t"' + name + '":{\r\t\twin: ' + map[name].win + ',\r\t\tlose: ' + map[name].lose + ',\r\t},';
 				}
+				text += '\r};\r';
 			}
-			text += '\r};\r';
 			game.copy(text, '对应胜负记录已成功复制到剪切板，请及时粘贴保存');
 		},
 	},
