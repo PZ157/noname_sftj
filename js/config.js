@@ -152,6 +152,7 @@ export const config = {
 					else alert('代码语法有错误，请仔细检查（' + e + '）');
 					return;
 				}
+				let num = 0;
 				for (let i of map) {
 					if (_status[i]) {
 						const cgn = 'extension_胜负统计_' + i;
@@ -160,10 +161,13 @@ export const config = {
 							if (!lib.config[cgn][name].win) lib.config[cgn][name].win = 0;
 							if (!lib.config[cgn][name].lose) lib.config[cgn][name].lose = 0;
 							let all = lib.config[cgn][name].win + lib.config[cgn][name].lose;
-							if (all) lib.config[cgn][name].sl = lib.config[cgn][name].win / all;
+							if (all) {
+								lib.config[cgn][name].sl = lib.config[cgn][name].win / all;
+								num++;
+							}
 							else delete lib.config[cgn][name];
 						}
-						game.saveConfig(i, lib.config[cgn]);
+						game.saveConfig(cgn, lib.config[cgn]);
 					}
 				}
 				ui.window.classList.remove('shortcutpaused');
@@ -171,6 +175,10 @@ export const config = {
 				container.delete();
 				container.code = code;
 				delete window.saveNonameInput;
+				if (num) {
+					alert('已成功载入' + num + '条武将胜负记录，稍后自动重启游戏');
+					game.reload();
+				}
 			};
 			window.saveNonameInput = saveInput;
 			let editor = ui.create.editor(container, saveInput);
