@@ -23,7 +23,7 @@ let extensionPackage = {
 };
 const extensionInfo = await lib.init.promises.json(`${lib.assetURL}extension/胜负统计/info.json`);
 Object.keys(extensionInfo).forEach((key) => {
-	if (key !== 'intro') extensionPackage.package[key] = extensionInfo[key];
+	if (key !== 'name' && key !== 'intro') extensionPackage.package[key] = extensionInfo[key];
 });
 
 export let type = 'extension';
