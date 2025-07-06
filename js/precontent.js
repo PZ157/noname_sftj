@@ -1,18 +1,28 @@
 import { lib, game, ui, get, ai, _status } from './utils.js';
 
 export function precontent(config, pack) {
-	lib.arenaReady.push(() => {
-		game.saveExtensionConfig('胜负记录', 'operateJl', false);
-		if (!Array.isArray(lib.config.extension_胜负统计_wj)) {
-			if (Array.isArray(lib.config.extension_AI优化_wj) && lib.config.extension_AI优化_wj.length) {
-				game.saveExtensionConfig('胜负统计', 'wj', lib.config.extension_AI优化_wj);
-				alert('已成功载入『AI优化』中对应伪禁列表配置');
-			} else if (Array.isArray(lib.config.extension_官将重修_wj) && lib.config.extension_官将重修_wj.length) {
-				game.saveExtensionConfig('胜负统计', 'wj', lib.config.extension_官将重修_wj);
-				alert('已成功载入『官将重修』中对应伪禁列表配置');
-			} else game.saveExtensionConfig('胜负统计', 'wj', []);
+	{
+		// 本体版本检测
+		let noname = lib.version.split('.').slice(2),
+			min = [17],
+			status = false;
+		while (noname.length < min.length) {
+			noname.push(0);
 		}
-	});
+		if (lib.version.slice(0, 5) === '1.10.') {
+			for (let i = 0; i < min.length; i++) {
+				if (Number(noname[i]) < min[i]) {
+					status = '您的无名杀版本太低';
+					break;
+				}
+			}
+		} else status = '检测到游戏大版本号与本扩展支持版本号不同';
+		if (typeof status === 'string') {
+			alert(status + '，为避免版本不兼容产生不必要的问题，已为您关闭『胜负统计』，稍后重启游戏');
+			game.saveExtensionConfig('胜负统计', 'enable', false);
+			game.reload();
+		}
+	}
 	lib.onfree.push(() => {
 		game.sfRefresh(true, true);
 	});

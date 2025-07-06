@@ -1,11 +1,12 @@
-//game.import(name:"胜负统计"
 import { lib, game, ui, get, ai, _status } from './js/utils.js';
+import { arenaReady } from './js/arenaReady.js';
 import { config } from './js/config.js';
 import { content } from './js/content.js';
 import { precontent } from './js/precontent.js';
 
 let extensionPackage = {
 	name: '胜负统计',
+	arenaReady,
 	content,
 	precontent,
 	config,
