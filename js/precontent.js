@@ -3,14 +3,15 @@ import { lib, game, ui, get, ai, _status } from './utils.js';
 export function precontent(config, pack) {
 	{
 		// 本体版本检测
-		let noname = lib.version.split('.').slice(1),
+		let noname = lib.version.split('.').slice(1).map((i) => Number(i)),
 			min = [10, 17],
 			status = false;
 		while (noname.length < min.length) {
 			noname.push(0);
 		}
 		for (let i = 0; i < min.length; i++) {
-			if (Number(noname[i]) < min[i]) {
+			if (noname[i] > min[i]) break;
+			if (noname[i] < min[i]) {
 				status = '您的无名杀版本太低';
 				break;
 			}
