@@ -3,20 +3,18 @@ import { lib, game, ui, get, ai, _status } from './utils.js';
 export function precontent(config, pack) {
 	{
 		// 本体版本检测
-		let noname = lib.version.split('.').slice(2),
-			min = [17],
+		let noname = lib.version.split('.').slice(1),
+			min = [10, 17],
 			status = false;
 		while (noname.length < min.length) {
 			noname.push(0);
 		}
-		if (lib.version.slice(0, 5) === '1.10.') {
-			for (let i = 0; i < min.length; i++) {
-				if (Number(noname[i]) < min[i]) {
-					status = '您的无名杀版本太低';
-					break;
-				}
+		for (let i = 0; i < min.length; i++) {
+			if (Number(noname[i]) < min[i]) {
+				status = '您的无名杀版本太低';
+				break;
 			}
-		} else status = '检测到游戏大版本号与本扩展支持版本号不同';
+		}
 		if (typeof status === 'string') {
 			alert(status + '，为避免版本不兼容产生不必要的问题，已为您关闭『胜负统计』，稍后重启游戏');
 			game.saveExtensionConfig('胜负统计', 'enable', false);
@@ -200,10 +198,8 @@ export function precontent(config, pack) {
 				continue;
 			let bool;
 			if (lib.config.extension_胜负统计_sw) {
-				if (wins.includes(i)) bool = result;
-				else bool = !result;
-			} else if (wins.includes(i)) bool = true;
-			else bool = false;
+				bool = wins.includes(i) ? result : !result; // bool = result ^ !wins.includes(i);
+			} else bool = wins.includes(i);
 			let cgn = get.sfConfigName(i.identity || 'unknown'),
 				names = [];
 			if (i.storage.sftj && i.name1 !== i.storage.sftj.cg1) {
